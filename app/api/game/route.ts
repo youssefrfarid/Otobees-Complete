@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GameManager } from '@/lib/gameLogic';
 
-const gameManager = GameManager.getInstance();
-
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, roomId, playerId, playerName, answers } = body;
+    const { action, roomId, playerName, playerId, answers } = body;
+    
+    console.log('API Request:', action, { roomId, playerName, playerId });
+    const gameManager = GameManager.getInstance();
 
     switch (action) {
       case 'createRoom': {
+        console.log('Creating room for:', playerName);
         const room = gameManager.createRoom(playerName);
-        return NextResponse.json({ success: true, room });
+        const host = room.players[0];
+        console.log('Room created:', room.id, 'Host:', host.name);
+        return NextResponse.json({ success: true, room, player: host });
       }
 
       case 'joinRoom': {
@@ -47,10 +51,13 @@ export async function POST(request: NextRequest) {
       }
 
       case 'getRoom': {
+        console.log('Getting room:', roomId);
         const room = gameManager.getRoom(roomId);
         if (!room) {
+          console.log('Room not found:', roomId);
           return NextResponse.json({ success: false, error: 'Room not found' });
         }
+        console.log('Room found:', room.id, 'State:', room.gameState);
         return NextResponse.json({ success: true, room });
       }
 

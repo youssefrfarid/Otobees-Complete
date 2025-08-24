@@ -13,13 +13,17 @@ export class GameManager {
 
   static getInstance(): GameManager {
     if (!global.gameManager) {
+      console.log('Creating new GameManager instance');
       global.gameManager = new GameManager();
+    } else {
+      console.log('Using existing GameManager instance');
     }
     return global.gameManager;
   }
 
   createRoom(hostName: string): GameRoom {
     const roomId = this.generateRoomCode();
+    console.log('Creating room:', roomId, 'Current rooms:', Array.from(this.rooms.keys()));
     const host: Player = {
       id: uuidv4(),
       name: hostName,
@@ -41,6 +45,7 @@ export class GameManager {
     };
 
     this.rooms.set(roomId, room);
+    console.log('Room created successfully:', roomId, 'Total rooms:', this.rooms.size);
     return room;
   }
 
@@ -189,7 +194,9 @@ export class GameManager {
   }
 
   getRoom(roomId: string): GameRoom | undefined {
-    return this.rooms.get(roomId);
+    const room = this.rooms.get(roomId);
+    console.log('Getting room:', roomId, 'Found:', !!room, 'Available rooms:', Array.from(this.rooms.keys()));
+    return room;
   }
 
   removePlayer(roomId: string, playerId: string): void {
