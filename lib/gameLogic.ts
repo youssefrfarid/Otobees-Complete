@@ -1,17 +1,21 @@
 import { GameRoom, Player, CategoryAnswers, LETTERS, CATEGORIES } from './gameTypes';
 import { v4 as uuidv4 } from 'uuid';
 
+// Use global to persist across hot reloads in Next.js dev mode
+declare global {
+  var gameManager: GameManager | undefined;
+}
+
 export class GameManager {
-  private static instance: GameManager;
   private rooms: Map<string, GameRoom> = new Map();
 
   private constructor() {}
 
   static getInstance(): GameManager {
-    if (!GameManager.instance) {
-      GameManager.instance = new GameManager();
+    if (!global.gameManager) {
+      global.gameManager = new GameManager();
     }
-    return GameManager.instance;
+    return global.gameManager;
   }
 
   createRoom(hostName: string): GameRoom {
