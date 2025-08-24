@@ -47,6 +47,10 @@ export default function GamePage() {
           } else {
             setError('Please enter your name to join');
           }
+        } else if (!currentPlayer && player) {
+          // Keep existing player state if not found temporarily
+          // This prevents kicks during state transitions
+          console.log('Player temporarily not found, keeping existing state');
         }
       } else {
         setError('Room not found');
@@ -57,7 +61,7 @@ export default function GamePage() {
     } finally {
       setLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, player]);
 
   // Join room
   const joinRoom = async (playerName: string) => {
@@ -196,12 +200,17 @@ export default function GamePage() {
   useEffect(() => {
     fetchRoom();
     
-    const interval = setInterval(fetchRoom, 2000); // Poll every 2 seconds
+    const interval = setInterval(() => {
+      // Only fetch if we're not in a loading state
+      if (!loading) {
+        fetchRoom();
+      }
+    }, 2000); // Poll every 2 seconds
     
     return () => {
       clearInterval(interval);
     };
-  }, [fetchRoom]);
+  }, [fetchRoom, loading]);
 
   // Handle browser back button
   useEffect(() => {

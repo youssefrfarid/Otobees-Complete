@@ -126,12 +126,8 @@ export class GameManager {
 
     room.gameState = 'roundEnd';
 
-    // Check if game should end
-    if (room.currentRound >= room.totalRounds) {
-      setTimeout(() => {
-        room.gameState = 'gameEnd';
-      }, 5000);
-    }
+    // Don't use setTimeout on server-side, let client handle transitions
+    // This prevents state sync issues
   }
 
   nextRound(roomId: string): boolean {
