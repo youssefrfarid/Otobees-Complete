@@ -1,5 +1,6 @@
 import { GameRoom, Player, CategoryAnswers, LETTERS, CATEGORIES } from './gameTypes';
 import { v4 as uuidv4 } from 'uuid';
+import { Storage } from './storage';
 
 // Use global to persist across hot reloads in Next.js dev mode
 declare global {
@@ -7,8 +8,6 @@ declare global {
 }
 
 export class GameManager {
-  private rooms: Map<string, GameRoom> = new Map();
-
   private constructor() {}
 
   static getInstance(): GameManager {
@@ -21,9 +20,9 @@ export class GameManager {
     return global.gameManager;
   }
 
-  createRoom(hostName: string): GameRoom {
+  async createRoom(hostName: string): Promise<GameRoom> {
     const roomId = this.generateRoomCode();
-    console.log('Creating room:', roomId, 'Current rooms:', Array.from(this.rooms.keys()));
+    console.log('Creating room:', roomId);
     const host: Player = {
       id: uuidv4(),
       name: hostName,
@@ -44,13 +43,13 @@ export class GameManager {
       host: host.id
     };
 
-    this.rooms.set(roomId, room);
-    console.log('Room created successfully:', roomId, 'Total rooms:', this.rooms.size);
+    await Storage.setRoom(roomId, room);
+    console.log('Room created successfully:', roomId);
     return room;
   }
 
-  joinRoom(roomId: string, playerName: string): { room: GameRoom | null; player: Player | null } {
-    const room = this.rooms.get(roomId);
+  async joinRoom(roomId: string, playerName: string): Promise<{ room: GameRoom | null; player: Player | null }> {
+    const room = await Storage.getRoom(roomId);
     if (!room || room.gameState !== 'waiting') {
       return { room: null, player: null };
     }
@@ -64,66 +63,69 @@ export class GameManager {
     };
 
     room.players.push(player);
+    await Storage.setRoom(roomId, room);
     return { room, player };
   }
 
-  startGame(roomId: string): boolean {
-    const room = this.rooms.get(roomId);
+  async startGame(roomId: string): Promise<boolean> {
+    const room = await Storage.getRoom(roomId);
     if (!room || room.players.length < 2) return false;
 
     room.gameState = 'playing';
     room.currentRound = 1;
     room.currentLetter = this.getRandomLetter(room.usedLetters);
     room.usedLetters.push(room.currentLetter);
-    
-    // Reset all players for new round
-    room.players.forEach(player => {
+
+    // Reset all players
+    room.players.forEach((player: Player) => {
       player.answers = this.getEmptyAnswers();
       player.hasSubmitted = false;
     });
 
+    await Storage.setRoom(roomId, room);
     return true;
   }
 
-  submitAnswers(roomId: string, playerId: string, answers: CategoryAnswers): boolean {
-    const room = this.rooms.get(roomId);
-    if (!room || room.gameState !== 'playing') return false;
+  async submitAnswers(roomId: string, playerId: string, answers: CategoryAnswers): Promise<boolean> {
+    const room = await Storage.getRoom(roomId);
+    if (!room) return false;
 
-    const player = room.players.find(p => p.id === playerId);
+    const player = room.players.find((p: Player) => p.id === playerId);
     if (!player) return false;
 
     player.answers = answers;
     player.hasSubmitted = true;
 
-    // Check if all players have submitted
-    if (room.players.every(p => p.hasSubmitted)) {
-      this.endRound(roomId);
+    await Storage.setRoom(roomId, room);
+
+    // Check if all players submitted
+    if (room.players.every((p: Player) => p.hasSubmitted)) {
+      await this.endRound(roomId);
     }
 
     return true;
   }
 
-  stopBus(roomId: string, playerId: string): boolean {
-    const room = this.rooms.get(roomId);
+  async stopBus(roomId: string, playerId: string): Promise<boolean> {
+    const room = await Storage.getRoom(roomId);
     if (!room || room.gameState !== 'playing') return false;
 
-    const player = room.players.find(p => p.id === playerId);
+    const player = room.players.find((p: Player) => p.id === playerId);
     if (!player || !player.hasSubmitted) return false;
 
-    // Force end the round
-    this.endRound(roomId);
+    await this.endRound(roomId);
     return true;
   }
 
-  private endRound(roomId: string): void {
-    const room = this.rooms.get(roomId);
+  private async endRound(roomId: string): Promise<void> {
+    const room = await Storage.getRoom(roomId);
     if (!room) return;
 
     // Calculate scores for this round
     const roundScores = this.calculateRoundScores(room);
     
     // Update player scores
-    room.players.forEach(player => {
+    room.players.forEach((player: Player) => {
       const score = roundScores[player.id] || 0;
       player.score += score;
       
@@ -134,17 +136,19 @@ export class GameManager {
     });
 
     room.gameState = 'roundEnd';
+    await Storage.setRoom(roomId, room);
 
     // Don't use setTimeout on server-side, let client handle transitions
     // This prevents state sync issues
   }
 
-  nextRound(roomId: string): boolean {
-    const room = this.rooms.get(roomId);
+  async nextRound(roomId: string): Promise<boolean> {
+    const room = await Storage.getRoom(roomId);
     if (!room || room.gameState !== 'roundEnd') return false;
 
     if (room.currentRound >= room.totalRounds) {
       room.gameState = 'gameEnd';
+      await Storage.setRoom(roomId, room);
       return false;
     }
 
@@ -154,11 +158,12 @@ export class GameManager {
     room.gameState = 'playing';
 
     // Reset players for new round
-    room.players.forEach(player => {
+    room.players.forEach((player: Player) => {
       player.answers = this.getEmptyAnswers();
       player.hasSubmitted = false;
     });
 
+    await Storage.setRoom(roomId, room);
     return true;
   }
 
@@ -193,22 +198,22 @@ export class GameManager {
     return scores;
   }
 
-  getRoom(roomId: string): GameRoom | undefined {
-    const room = this.rooms.get(roomId);
-    console.log('Getting room:', roomId, 'Found:', !!room, 'Available rooms:', Array.from(this.rooms.keys()));
+  async getRoom(roomId: string): Promise<GameRoom | null> {
+    const room = await Storage.getRoom(roomId);
+    console.log('Getting room:', roomId, 'Found:', !!room);
     return room;
   }
 
-  removePlayer(roomId: string, playerId: string): void {
-    const room = this.rooms.get(roomId);
+  async removePlayer(roomId: string, playerId: string): Promise<void> {
+    const room = await Storage.getRoom(roomId);
     if (!room) return;
 
-    room.players = room.players.filter(p => p.id !== playerId);
+    room.players = room.players.filter((p: Player) => p.id !== playerId);
     
     if (room.players.length === 0) {
-      this.rooms.delete(roomId);
-    } else if (room.host === playerId && room.players.length > 0) {
-      room.host = room.players[0].id;
+      await Storage.deleteRoom(roomId);
+    } else {
+      await Storage.setRoom(roomId, room);
     }
   }
 
